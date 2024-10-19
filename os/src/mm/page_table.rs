@@ -1,5 +1,7 @@
 //! Implementation of [`PageTableEntry`] and [`PageTable`].
 
+use crate::task::current_user_token;
+
 use super::{frame_alloc, FrameTracker, PhysPageNum, StepByOne, VirtAddr, VirtPageNum};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -170,4 +172,13 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
         start = end_va.into();
     }
     v
+}
+
+/// 虚拟地址转换为物理地址
+pub fn translated_physical_address(ptr: *const u8) -> usize {
+    let token = current_user_token();
+    let page_table = PageTable::from_token(token);
+    let virt_addr = VirtAddr::from(ptr as usize);
+    let ppn = page_table.find_pte(virt_addr.floor()).unwrap().ppn();
+    super::PhysAddr::from(ppn).0 + virt_addr.page_offset()
 }

@@ -14,8 +14,11 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::{get_app_data, get_num_app};
+use crate::loader::get_app_data;
+use crate::loader::get_num_app;
+use crate::mm::VirtPageNum;
 use crate::sync::UPSafeCell;
+use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -80,6 +83,8 @@ impl TaskManager {
         let next_task = &mut inner.tasks[0];
         next_task.task_status = TaskStatus::Running;
         let next_task_cx_ptr = &next_task.task_cx as *const TaskContext;
+        // start time
+        next_task.start_time = get_time_ms();
         drop(inner);
         let mut _unused = TaskContext::zero_init();
         // before this, we should drop local variables that must be dropped manually
@@ -140,6 +145,9 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            if inner.tasks[next].start_time == 0 {
+                inner.tasks[next].start_time = get_time_ms();
+            }
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -152,6 +160,55 @@ impl TaskManager {
         } else {
             panic!("All applications completed!");
         }
+    }
+
+    //fn get_current_task_info(&self) -> TaskControlBlock {
+    //     let inner = self.inner.exclusive_access();
+    //    let current_task = inner.current_task;
+    //    inner.tasks[current_task]
+    // }
+
+    fn add_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        let current_task_tcb = &mut inner.tasks[current_task];
+        current_task_tcb.syscall_times[syscall_id] += 1;
+    }
+
+    fn mmap(&self, start: VirtPageNum, end: VirtPageNum, port: usize) -> isize {
+        // 获取当前任务
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        let c_tcb = &mut inner.tasks[current_task];
+        // 获取内存，作映射
+        c_tcb.memory_set.mmap(start, end, port)
+    }
+
+    fn unmap(&self, start: VirtPageNum, end: VirtPageNum) -> isize {
+        // 获取当前任务
+        let mut inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        let c_tcb = &mut inner.tasks[current_task];
+        // 获取内存，取消映射
+        c_tcb.memory_set.unmap(start, end)
+    }
+
+    fn get_current_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        let current_task = inner.current_task;
+        inner.tasks[current_task].task_status
+    }
+
+    fn get_syscalls_time(&self) -> [u32; 500] {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_times
+    }
+
+    fn get_current_start_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].start_time
     }
 }
 
@@ -201,4 +258,34 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 /// Change the current 'Running' task's program break
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
+}
+
+/// 获取当前任务状态
+pub fn get_current_status() -> TaskStatus {
+    TASK_MANAGER.get_current_status()
+}
+
+/// 获取系统调用次数
+pub fn get_syscalls_time() -> [u32; 500] {
+    TASK_MANAGER.get_syscalls_time()
+}
+
+/// 获取任务开始时间
+pub fn get_current_start_time() -> usize {
+    TASK_MANAGER.get_current_start_time()
+}
+
+/// add sys_call_time
+pub fn add_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.add_syscall_times(syscall_id);
+}
+
+/// 地址映射
+pub fn mmap(start: VirtPageNum, end: VirtPageNum, port: usize) -> isize {
+    TASK_MANAGER.mmap(start, end, port)
+}
+
+/// 取消地址映射
+pub fn unmap(start: VirtPageNum, end: VirtPageNum) -> isize {
+    TASK_MANAGER.unmap(start, end)
 }
