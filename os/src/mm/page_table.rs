@@ -4,6 +4,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use crate::task::current_user_token;
+
 
 bitflags! {
     /// page table entry flags
@@ -193,9 +195,10 @@ pub fn translated_str(token: usize, ptr: *const u8) -> String {
             .get_mut());
         if ch == 0 {
             break;
+        } else {
+            string.push(ch as char);
+            va += 1;
         }
-        string.push(ch as char);
-        va += 1;
     }
     string
 }
@@ -275,4 +278,13 @@ impl Iterator for UserBufferIterator {
             Some(r)
         }
     }
+}
+
+/// 虚拟地址转换为物理地址
+pub fn translated_physical_address(ptr: *const u8) -> usize {
+    let token = current_user_token();
+    let page_table = PageTable::from_token(token);
+    let virt_addr = VirtAddr::from(ptr as usize);
+    let ppn = page_table.find_pte(virt_addr.floor()).unwrap().ppn();
+    super::PhysAddr::from(ppn).0 + virt_addr.page_offset()
 }
