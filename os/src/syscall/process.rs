@@ -122,7 +122,17 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // 系统调用发生在用户态下的指针
+    let us = get_time_us();
+    // 转换到物理地址
+    let time_ptr = translated_physical_address(ts as *const u8) as *mut TimeVal;
+    unsafe {
+        *time_ptr = TimeVal {
+            sec: us / 1000000,
+            usec: us % 1000000,
+        };
+    }
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -133,7 +143,19 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let task_status = get_current_status();
+    let info_time = get_current_start_time();
+    let syscall_times = get_syscalls_time();
+    let time = get_time_ms();
+    let ti_ptr = translated_physical_address(ti as *const u8) as *mut TaskInfo;
+    unsafe {
+        *ti_ptr = TaskInfo {
+            status: task_status,
+            syscall_times,
+            time: time - info_time,
+        };
+    }
+    0
 }
 
 /// YOUR JOB: Implement mmap.
@@ -142,7 +164,24 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let start_vaddr: VirtAddr = _start.into();
+    if !start_vaddr.aligned() {
+        return -1;
+    }
+
+    if _port & !0x7 != 0 || _port & 0x7 == 0 {
+        return -1;
+    }
+
+    if _len == 0 {
+        return 0;
+    }
+
+    let end_vaddr: VirtAddr = (_start + _len).into();
+
+    let start_vpn: VirtPageNum = start_vaddr.into();
+    let end_vpn: VirtPageNum = end_vaddr.ceil();
+    mmap(start_vpn, end_vpn, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -151,7 +190,16 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
         "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let start_vaddr: VirtAddr = _start.into();
+    if !start_vaddr.aligned() {
+        return -1;
+    }
+
+    let end_vaddr: VirtAddr = (_start + _len).into();
+
+    let start_vpn: VirtPageNum = start_vaddr.into();
+    let end_vpn: VirtPageNum = end_vaddr.ceil();
+    unmap(start_vpn, end_vpn)
 }
 
 /// change data segment size

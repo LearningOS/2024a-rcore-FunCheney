@@ -4,6 +4,8 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitflags::*;
+use crate::task::current_user_token;
+
 
 bitflags! {
     /// page table entry flags
@@ -212,4 +214,13 @@ pub fn translated_refmut<T>(token: usize, ptr: *mut T) -> &'static mut T {
         .translate_va(VirtAddr::from(va))
         .unwrap()
         .get_mut()
+}
+
+/// 虚拟地址转换为物理地址
+pub fn translated_physical_address(ptr: *const u8) -> usize {
+    let token = current_user_token();
+    let page_table = PageTable::from_token(token);
+    let virt_addr = VirtAddr::from(ptr as usize);
+    let ppn = page_table.find_pte(virt_addr.floor()).unwrap().ppn();
+    super::PhysAddr::from(ppn).0 + virt_addr.page_offset()
 }
