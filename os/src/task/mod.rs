@@ -21,7 +21,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::loader::get_app_data_by_name;
+use crate::{loader::get_app_data_by_name, timer::get_time};
 use alloc::sync::Arc;
 use lazy_static::*;
 pub use manager::{fetch_task, TaskManager};
@@ -32,8 +32,9 @@ pub use context::TaskContext;
 pub use id::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 pub use manager::add_task;
 pub use processor::{
-    current_task, current_trap_cx, current_user_token, run_tasks, schedule, take_current_task,
-    Processor,
+    add_syscalls_times, current_task, current_trap_cx, current_user_token, get_task_start_time,
+    get_task_status, get_task_syscalls_time, mmap, run_tasks, schedule, set_task_priority,
+    take_current_task, unmap, Processor,
 };
 /// Suspend the current 'Running' task and run the next task in task list.
 pub fn suspend_current_and_run_next() {
@@ -45,6 +46,12 @@ pub fn suspend_current_and_run_next() {
     let task_cx_ptr = &mut task_inner.task_cx as *mut TaskContext;
     // Change status to Ready
     task_inner.task_status = TaskStatus::Ready;
+    if task_inner.start_time == 0 {
+        task_inner.start_time = get_time();
+    }
+
+    // 增加 stride 的值
+    task_inner.task_stride = task_inner.task_stride + 1000 / task_inner.task_priority;
     drop(task_inner);
     // ---- release current PCB
 

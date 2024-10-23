@@ -7,6 +7,8 @@
 use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
+use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::VirtPageNum;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
@@ -108,4 +110,63 @@ pub fn schedule(switched_task_cx_ptr: *mut TaskContext) {
     unsafe {
         __switch(switched_task_cx_ptr, idle_task_cx_ptr);
     }
+}
+
+/// 获取任务信息
+pub fn get_task_status() -> TaskStatus {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_status()
+}
+
+/// 获取任务开始时间
+pub fn get_task_start_time() -> usize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_start_time()
+}
+
+/// 获取执行次数
+pub fn get_task_syscalls_time() -> [u32; MAX_SYSCALL_NUM] {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .get_syscalls_time()
+}
+
+/// 地址映射
+pub fn mmap(start_vpn: VirtPageNum, end_vpn: VirtPageNum, port: usize) -> isize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .memory_set
+        .mmap(start_vpn, end_vpn, port)
+}
+
+/// 取消地址映射
+pub fn unmap(start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> isize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .memory_set
+        .unmap(start_vpn, end_vpn)
+}
+
+/// 添加任务调用次数
+pub fn add_syscalls_times(syscall_id: usize) {
+    let mut syscalls_time = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .syscalls_time;
+    syscalls_time[syscall_id] += 1;
+}
+
+/// 设置优先级
+pub fn set_task_priority(p: usize) {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .task_priority = p
 }
