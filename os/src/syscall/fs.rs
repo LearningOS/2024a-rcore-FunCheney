@@ -1,11 +1,7 @@
 //! File and filesystem-related syscalls
 use crate::fs::{open_file, OpenFlags, Stat};
 use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
-use crate::task::{current_task, current_user_token,suspend_current_and_run_next};
-use crate::sbi::console_getchar;
-
-const FD_STDIN: usize = 0;
-const FD_STDOUT: usize = 1;
+use crate::task::{current_task, current_user_token};
 
 /// write buf of length `len`  to a file with `fd`
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
