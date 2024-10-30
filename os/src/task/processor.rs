@@ -8,7 +8,7 @@ use super::__switch;
 use super::{fetch_task, TaskStatus};
 use super::{TaskContext, TaskControlBlock};
 use crate::config::MAX_SYSCALL_NUM;
-use crate::mm::{VirtAddr, VirtPageNum};
+use crate::mm::VirtAddr;
 use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;

@@ -2,6 +2,11 @@
 //!
 use alloc::sync::Arc;
 
+use crate::mm::VirtAddr;
+use crate::task::{
+    get_task_start_time, get_task_status, get_task_syscalls_time, mmap, set_task_priority, unmap,
+    TaskControlBlock,
+};
 use crate::{
     config::MAX_SYSCALL_NUM,
     fs::{open_file, OpenFlags},
@@ -12,8 +17,6 @@ use crate::{
     },
     timer::get_time_us,
 };
-use crate::mm::{translated_byte_buffer, VirtAddr};
-use crate::task::{get_task_start_time, get_task_status, get_task_syscalls_time, mmap, set_task_priority, TaskControlBlock, unmap};
 
 #[repr(C)]
 #[derive(Debug)]
@@ -129,14 +132,12 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     let us = get_time_us();
     let token = current_user_token();
     // 转换到物理地址
-    let time_ptr = translated_refmut(token, ts) ;
+    let time_ptr = translated_refmut(token, ts);
 
-    unsafe {
-        *time_ptr = TimeVal {
-            sec: us / 1000000,
-            usec: us % 1000000,
-        };
-    }
+    *time_ptr = TimeVal {
+        sec: us / 1000000,
+        usec: us % 1000000,
+    };
     0
 }
 
@@ -152,14 +153,12 @@ pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
     let info_time = get_task_start_time();
     let syscall_times = get_task_syscalls_time();
     let time = get_time_us();
-    let ti_ptr = translated_refmut(current_user_token(),ti);
-    unsafe {
-        *ti_ptr = TaskInfo {
-            status: task_status,
-            syscall_times,
-            time: time - info_time,
-        };
-    }
+    let ti_ptr = translated_refmut(current_user_token(), ti);
+    *ti_ptr = TaskInfo {
+        status: task_status,
+        syscall_times,
+        time: time - info_time,
+    };
     0
 }
 
@@ -201,7 +200,6 @@ pub fn sys_munmap(_start: usize, _len: usize) -> isize {
     let end_vaddr: VirtAddr = (_start + _len).into();
 
     unmap(start_vaddr, end_vaddr)
-
 }
 
 /// change data segment size
@@ -225,7 +223,7 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     let path = translated_str(token, _path);
 
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
-        let data=app_inode.read_all();
+        let data = app_inode.read_all();
         // 当前任务
         let task = current_task().unwrap();
         let mut task_inner = task.inner_exclusive_access();
@@ -242,7 +240,6 @@ pub fn sys_spawn(_path: *const u8) -> isize {
     } else {
         -1
     }
-
 }
 
 // YOUR JOB: Set task priority.

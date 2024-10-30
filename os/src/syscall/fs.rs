@@ -1,9 +1,10 @@
 //! File and filesystem-related syscalls
 
-use crate::fs::{link_at, open_file, unlink_at, OpenFlags, Stat, StatMode, get_inode_id, get_nlink};
+use crate::fs::{
+    get_inode_id, get_nlink, link_at, open_file, unlink_at, OpenFlags, Stat, StatMode,
+};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
-use core::mem::size_of;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     trace!("kernel:pid[{}] sys_write", current_task().unwrap().pid.0);
@@ -96,15 +97,13 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     let st_ptr = translated_refmut(current_user_token(), _st);
     let ino = get_inode_id() as u64;
     let nlink = get_nlink() as u32;
-    unsafe {
-        *st_ptr = Stat {
-            dev: 0,
-            ino,
-            mode: StatMode::FILE,
-            nlink,
-            pad: [0; 7],
-        };
-    }
+    *st_ptr = Stat {
+        dev: 0,
+        ino,
+        mode: StatMode::FILE,
+        nlink,
+        pad: [0; 7],
+    };
     0
 }
 
