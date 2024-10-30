@@ -4,14 +4,14 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use super::{File, Stat, StatMode};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bitflags::*;
-use easy_fs::{EasyFileSystem, Inode};
+use easy_fs::{DiskInodeType, EasyFileSystem, Inode};
 use lazy_static::*;
 
 /// inode in memory
@@ -155,4 +155,25 @@ impl File for OSInode {
         }
         total_write_size
     }
+
+}
+
+/// link_at
+pub fn link_at(oldname: &str, newname: &str) -> isize {
+    ROOT_INODE.link_at(oldname, newname)
+}
+
+/// unlink_at
+pub fn unlink_at(name: &str) -> isize {
+    ROOT_INODE.unlink_at(name)
+}
+
+/// get_inode_id
+pub fn get_inode_id() -> usize {
+    ROOT_INODE.get_node_id()
+}
+
+/// get_nlink
+pub fn get_nlink() -> usize {
+    ROOT_INODE.get_nlink()
 }

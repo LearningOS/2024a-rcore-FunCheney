@@ -183,4 +183,100 @@ impl Inode {
         });
         block_cache_sync_all();
     }
+
+    /// link_at
+    pub fn link_at(&self, oldname: &str, newname: &str) -> isize {
+        let mut fs = self.fs.lock();
+        let old_inode_id =
+            self.read_disk_inode(|disk_inode| self.find_inode_id(oldname, disk_inode));
+        if old_inode_id.is_none() {
+            return -1;
+        }
+
+        // disk_inode
+        let (block_id, block_offset) = fs.get_disk_inode_pos(old_inode_id.unwrap());
+
+        // 修改缓存中的数据
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |n: &mut DiskInode| n.nlink += 1);
+
+        self.modify_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let new_size = (file_count + 1) * DIRENT_SZ;
+            self.increase_size(new_size as u32, disk_inode, &mut fs);
+
+            let direntry = DirEntry::new(newname, old_inode_id.unwrap());
+
+            disk_inode.write_at(
+                file_count * DIRENT_SZ,
+                direntry.as_bytes(),
+                &self.block_device,
+            );
+        });
+
+        block_cache_sync_all();
+        0
+    }
+
+    /// unlink_at
+    pub fn unlink_at(&self, name: &str) -> isize {
+        let mut fs = self.fs.lock();
+
+        let inode_id = self.read_disk_inode(|disk_inode| self.find_inode_id(name, disk_inode));
+
+        if inode_id.is_none() {
+            return -1;
+        }
+
+        let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id.unwrap());
+
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |n: &mut DiskInode| {
+                n.nlink -= 1;
+                let fcnt = (dinode.size as usize) / DIRENT_SZ;
+                for i in 0..fcnt {
+                    let mut dirent = DirEntry::empty();
+                    assert_eq!(
+                        dinode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device),
+                        DIRENT_SZ
+                    );
+                    if dirent.name() == name {
+                        dirent = DirEntry::empty();
+                        dinode.write_at(i * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
+                    }
+                }
+            });
+
+        block_cache_sync_all();
+        0
+    }
+
+    /// 获取 node_id
+    pub fn get_node_id(&self) -> usize {
+        let inode_size = core::mem::size_of::<DiskInode>();
+        let inodes_per_block = BLOCK_SZ / inode_size;
+        inodes_per_block * self.block_id + self.block_offset
+    }
+
+    /// 获取当前node 链接数
+    pub fn get_nlink(&self) -> usize {
+        let mut nlink = 0;
+        self.read_disk_inode(|dinode| {
+            nlink = dinode.nlink;
+        });
+        nlink
+    }
+
+    /// 获取文件类型
+    pub fn get_file_type(&self) -> DiskInodeType {
+        let mut ftype = DiskInodeType::File;
+        self.read_disk_inode(|dinode| {
+            if dinode.is_dir() {
+                ftype = DiskInodeType::Directory;
+            }
+        });
+        ftype
+    }
 }

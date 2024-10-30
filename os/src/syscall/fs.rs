@@ -1,7 +1,9 @@
 //! File and filesystem-related syscalls
-use crate::fs::{open_file, OpenFlags, Stat};
-use crate::mm::{translated_byte_buffer, translated_str, UserBuffer};
+
+use crate::fs::{link_at, open_file, unlink_at, OpenFlags, Stat, StatMode, get_inode_id, get_nlink};
+use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
+use core::mem::size_of;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     trace!("kernel:pid[{}] sys_write", current_task().unwrap().pid.0);
@@ -81,7 +83,33 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
         "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let task = current_task().unwrap();
+    let inner = task.inner_exclusive_access();
+    if _fd > inner.fd_table.len() {
+        return -1;
+    }
+
+    if inner.fd_table[_fd].is_none() {
+        return -1;
+    }
+
+    let mut st_ptr = translated_refmut(current_user_token(), _st);
+    let ino = get_inode_id() as u64;
+    let nlink = get_nlink() as u32;
+    unsafe {
+        *st_ptr = Stat {
+            dev: 0,
+            /// inode number
+            ino,
+            /// file type and mode
+            mode: StatMode::FILE,
+            /// number of hard links
+            nlink,
+            /// unused pad
+            pad: [0; 7],
+        };
+    }
+    0
 }
 
 /// YOUR JOB: Implement linkat.
@@ -90,7 +118,13 @@ pub fn sys_linkat(_old_name: *const u8, _new_name: *const u8) -> isize {
         "kernel:pid[{}] sys_linkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let old_name = translated_str(token, _old_name);
+    let new_name = translated_str(token, _new_name);
+    if old_name == new_name {
+        return -1;
+    }
+    link_at(&old_name, &new_name)
 }
 
 /// YOUR JOB: Implement unlinkat.
@@ -99,5 +133,6 @@ pub fn sys_unlinkat(_name: *const u8) -> isize {
         "kernel:pid[{}] sys_unlinkat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let dir_name = translated_str(current_user_token(), _name);
+    unlink_at(&dir_name)
 }
