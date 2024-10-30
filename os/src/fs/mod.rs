@@ -30,6 +30,7 @@ pub struct Stat {
     /// number of hard links
     pub nlink: u32,
     /// unused pad
+    #[allow(unused)]
     pub pad: [u64; 7],
 }
 

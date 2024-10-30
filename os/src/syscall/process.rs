@@ -228,7 +228,7 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         let data=app_inode.read_all();
         // 当前任务
         let task = current_task().unwrap();
-        let mut task_inner = task.unwrap().inner_exclusive_access();
+        let mut task_inner = task.inner_exclusive_access();
         // 创建新任务
         let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(data.as_slice()));
         let mut new_task_inner = new_task.inner_exclusive_access();

@@ -233,8 +233,8 @@ impl Inode {
 
         get_block_cache(block_id as usize, Arc::clone(&self.block_device))
             .lock()
-            .modify(block_offset, |n: &mut DiskInode| {
-                n.nlink -= 1;
+            .modify(block_offset, |dinode: &mut DiskInode| {
+                dinode.nlink -= 1;
                 let fcnt = (dinode.size as usize) / DIRENT_SZ;
                 for i in 0..fcnt {
                     let mut dirent = DirEntry::empty();
@@ -261,7 +261,7 @@ impl Inode {
     }
 
     /// 获取当前node 链接数
-    pub fn get_nlink(&self) -> usize {
+    pub fn get_nlink(&self) -> u32 {
         let mut nlink = 0;
         self.read_disk_inode(|dinode| {
             nlink = dinode.nlink;

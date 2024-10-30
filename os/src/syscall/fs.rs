@@ -93,19 +93,15 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
         return -1;
     }
 
-    let mut st_ptr = translated_refmut(current_user_token(), _st);
+    let st_ptr = translated_refmut(current_user_token(), _st);
     let ino = get_inode_id() as u64;
     let nlink = get_nlink() as u32;
     unsafe {
         *st_ptr = Stat {
             dev: 0,
-            /// inode number
             ino,
-            /// file type and mode
             mode: StatMode::FILE,
-            /// number of hard links
             nlink,
-            /// unused pad
             pad: [0; 7],
         };
     }
