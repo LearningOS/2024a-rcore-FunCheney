@@ -195,15 +195,8 @@ impl Inode {
             return -1;
         }
 
-        // disk_inode
-        let (block_id, block_offset) = fs.get_disk_inode_pos(old_inode_id.unwrap());
-
-        // 修改缓存中的数据
-        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
-            .lock()
-            .modify(block_offset, |n: &mut DiskInode| n.nlink += 1);
-
         self.modify_disk_inode(|disk_inode| {
+            disk_inode.nlink += 1;
             let file_count = (disk_inode.size as usize) / DIRENT_SZ;
             let new_size = (file_count + 1) * DIRENT_SZ;
             self.increase_size(new_size as u32, disk_inode, &mut fs);
@@ -238,6 +231,7 @@ impl Inode {
         self.modify_disk_inode(|root_inode| {
             let file_count = (root_inode.size as usize) / DIRENT_SZ;
             let mut dirent = DirEntry::empty();
+            root_inode.nlink = nlinks - 1;
             for i in 0..file_count {
                 assert_eq!(
                     root_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
