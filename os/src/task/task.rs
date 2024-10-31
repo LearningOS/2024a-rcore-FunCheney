@@ -2,6 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::{MAX_SYSCALL_NUM, TRAP_CONTEXT_BASE};
+use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::timer::get_time;
@@ -10,7 +11,6 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec;
 use alloc::vec::Vec;
 use core::cell::RefMut;
-use crate::fs::{File, Stdin, Stdout};
 
 /// Task control block structure
 ///
@@ -297,6 +297,20 @@ impl TaskControlBlock {
         } else {
             None
         }
+    }
+
+    /// spawn a new process by elf_data provided by user
+    pub fn spawn(self: &Arc<Self>, elf_data: &[u8]) -> Arc<Self> {
+        let spawn_task_control_block = Arc::new(TaskControlBlock::new(elf_data));
+
+        let mut parent_inner = self.inner_exclusive_access();
+        parent_inner.children.push(spawn_task_control_block.clone());
+
+        let mut inner = spawn_task_control_block.inner_exclusive_access();
+        inner.parent = Some(Arc::downgrade(self));
+
+        drop(inner);
+        spawn_task_control_block
     }
 }
 

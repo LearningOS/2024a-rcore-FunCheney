@@ -5,7 +5,6 @@ use alloc::sync::Arc;
 use crate::mm::VirtAddr;
 use crate::task::{
     get_task_start_time, get_task_status, get_task_syscalls_time, mmap, set_task_priority, unmap,
-    TaskControlBlock,
 };
 use crate::{
     config::MAX_SYSCALL_NUM,
@@ -226,17 +225,26 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         let data = app_inode.read_all();
         // 当前任务
         let task = current_task().unwrap();
-        let mut task_inner = task.inner_exclusive_access();
+        // let mut task_inner = task.inner_exclusive_access();
         // 创建新任务
-        let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(data.as_slice()));
-        let mut new_task_inner = new_task.inner_exclusive_access();
-        new_task_inner.parent = Some(Arc::downgrade(&task));
-        task_inner.children.push(new_task.clone());
-        drop(new_task_inner);
+        //let new_task: Arc<TaskControlBlock> = Arc::new(TaskControlBlock::new(data.as_slice()));
+        //let mut new_task_inner = new_task.inner_exclusive_access();
+
+        //new_task_inner.parent = Some(Arc::downgrade(&task));
+        //task_inner.children.push(new_task.clone());
         // 新的进程ID
-        let new_pid = new_task.pid.0;
-        add_task(new_task);
-        new_pid as isize
+        //let new_pid = new_task.pid.0;
+        //let trap_cx = new_task_inner.get_trap_cx();
+        //trap_cx.x[10] = 0;
+        let spawn_task = task.spawn(&data);
+
+        let pid = spawn_task.pid.0;
+
+        let trap_cx = spawn_task.inner_exclusive_access().get_trap_cx();
+        trap_cx.x[10] = 0;
+
+        add_task(spawn_task);
+        pid as isize
     } else {
         -1
     }
