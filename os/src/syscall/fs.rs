@@ -1,8 +1,6 @@
 //! File and filesystem-related syscalls
 
-use crate::fs::{
-    get_inode_id, get_nlink, link_at, open_file, unlink_at, OpenFlags, Stat, StatMode,
-};
+use crate::fs::{link_at, open_file, unlink_at, OpenFlags, Stat};
 use crate::mm::{translated_byte_buffer, translated_refmut, translated_str, UserBuffer};
 use crate::task::{current_task, current_user_token};
 
@@ -84,27 +82,22 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
         "kernel:pid[{}] sys_fstat NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
+
+    info!("sys_fstat fd {}", _fd);
     let task = current_task().unwrap();
     let inner = task.inner_exclusive_access();
     if _fd > inner.fd_table.len() {
         return -1;
     }
 
-    if inner.fd_table[_fd].is_none() {
-        return -1;
+    if let Some(_file) = &inner.fd_table[_fd] {
+        let file = _file.clone();
+        drop(inner);
+        *translated_refmut(current_user_token(), _st) = file.file_stat();
+        0
+    } else {
+        -1
     }
-
-    let st_ptr = translated_refmut(current_user_token(), _st);
-    let ino = get_inode_id() as u64;
-    let nlink = get_nlink() as u32;
-    *st_ptr = Stat {
-        dev: 0,
-        ino,
-        mode: StatMode::FILE,
-        nlink,
-        pad: [0; 7],
-    };
-    0
 }
 
 /// YOUR JOB: Implement linkat.
