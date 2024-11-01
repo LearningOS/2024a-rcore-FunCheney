@@ -196,11 +196,17 @@ impl Inode {
         }
 
         let (block_id, block_offset) = fs.get_disk_inode_pos(old_inode_id.unwrap());
-        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
-            .lock()
-            .modify(block_offset, |dinode: &mut DiskInode| {
-                dinode.nlink += 1;
-            });
+
+        let node = Arc::new(Self::new(
+            block_id,
+            block_offset,
+            self.fs.clone(),
+            self.block_device.clone(),
+        ));
+
+        node.modify_disk_inode(|disk_inode| {
+            disk_inode.nlink += 1;
+        });
         self.modify_disk_inode(|disk_inode| {
             let file_count = (disk_inode.size as usize) / DIRENT_SZ;
             let new_size = (file_count + 1) * DIRENT_SZ;
@@ -231,34 +237,34 @@ impl Inode {
 
         let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id.unwrap());
 
-        let mut nlinks = self.get_nlink();
-        //get_block_cache(block_id as usize, Arc::clone(&self.block_device))
-        //  .lock()
-        //  .modify(block_offset, |dinode: &mut DiskInode| {
-        //      dinode.nlink -= 1;
-        //      nlinks -= 1;
-        //  });
-        self.modify_disk_inode(|root_inode| {
-            let file_count = (root_inode.size as usize) / DIRENT_SZ;
+        // 获取这个inode
+        let node = Arc::new(Self::new(
+            block_id,
+            block_offset,
+            self.fs.clone(),
+            self.block_device.clone(),
+        ));
+
+        node.modify_disk_inode(|disk_inode| {
+            disk_inode.nlink -= 1;
+        });
+
+        self.modify_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
             let mut dirent = DirEntry::empty();
             for i in 0..file_count {
-                assert_eq!(
-                    root_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
-                    DIRENT_SZ,
-                );
+                disk_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device);
                 if dirent.name() == name {
-                    nlinks -= 1;
-                    // remove dirent
-                    let last_dirent = DirEntry::empty();
-                    root_inode.write_at(i * DIRENT_SZ, last_dirent.as_bytes(), &self.block_device);
+                    let dirent = DirEntry::empty();
+                    disk_inode.write_at(i * DIRENT_SZ, dirent.as_bytes(), &self.block_device);
                     break;
+                } else {
+                    continue;
                 }
             }
         });
-        if nlinks <= 1 {
-            // dealloc inode
-            self.fs.lock().dealloc_data(block_id);
-        }
+
+        block_cache_sync_all();
 
         0
     }
