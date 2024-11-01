@@ -195,8 +195,13 @@ impl Inode {
             return -1;
         }
 
+        let (block_id, block_offset) = fs.get_disk_inode_pos(old_inode_id.unwrap());
+        get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+            .lock()
+            .modify(block_offset, |dinode: &mut DiskInode| {
+                dinode.nlink += 1;
+            });
         self.modify_disk_inode(|disk_inode| {
-            disk_inode.nlink += 1;
             let file_count = (disk_inode.size as usize) / DIRENT_SZ;
             let new_size = (file_count + 1) * DIRENT_SZ;
             self.increase_size(new_size as u32, disk_inode, &mut fs);
@@ -216,7 +221,7 @@ impl Inode {
 
     /// unlink_at
     pub fn unlink_at(&self, name: &str) -> isize {
-        let mut fs = self.fs.lock();
+        let fs = self.fs.lock();
 
         let inode_id = self.read_disk_inode(|disk_inode| self.find_inode_id(name, disk_inode));
 
@@ -226,18 +231,23 @@ impl Inode {
 
         let (block_id, block_offset) = fs.get_disk_inode_pos(inode_id.unwrap());
 
-        let inode_id = inode_id.unwrap();
-        let nlinks = self.get_nlink();
+        let mut nlinks = self.get_nlink();
+        //get_block_cache(block_id as usize, Arc::clone(&self.block_device))
+        //  .lock()
+        //  .modify(block_offset, |dinode: &mut DiskInode| {
+        //      dinode.nlink -= 1;
+        //      nlinks -= 1;
+        //  });
         self.modify_disk_inode(|root_inode| {
             let file_count = (root_inode.size as usize) / DIRENT_SZ;
             let mut dirent = DirEntry::empty();
-            root_inode.nlink = nlinks - 1;
             for i in 0..file_count {
                 assert_eq!(
                     root_inode.read_at(i * DIRENT_SZ, dirent.as_bytes_mut(), &self.block_device,),
                     DIRENT_SZ,
                 );
                 if dirent.name() == name {
+                    nlinks -= 1;
                     // remove dirent
                     let last_dirent = DirEntry::empty();
                     root_inode.write_at(i * DIRENT_SZ, last_dirent.as_bytes(), &self.block_device);
@@ -245,11 +255,10 @@ impl Inode {
                 }
             }
         });
-        if nlinks == 1 {
+        if nlinks <= 1 {
             // dealloc inode
             self.fs.lock().dealloc_data(block_id);
         }
-        block_cache_sync_all();
 
         0
     }
