@@ -8,6 +8,7 @@ use crate::{
     },
 };
 use alloc::{string::String, sync::Arc, vec::Vec};
+use crate::timer::get_time_us;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -167,7 +168,19 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().process.upgrade().unwrap().getpid()
     );
-    -1
+
+    // 系统调用发生在用户态下的指针
+    let us = get_time_us();
+    let token = current_user_token();
+    // 转换到物理地址
+    let time_ptr = translated_refmut(token, _ts);
+
+    *time_ptr = TimeVal {
+        sec: us / 1000000,
+        usec: us % 1000000,
+    };
+    0
+
 }
 
 /// task_info syscall

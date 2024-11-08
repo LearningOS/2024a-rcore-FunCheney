@@ -7,7 +7,7 @@ use super::{add_task, SignalFlags};
 use super::{pid_alloc, PidHandle};
 use crate::fs::{File, Stdin, Stdout};
 use crate::mm::{translated_refmut, MemorySet, KERNEL_SPACE};
-use crate::sync::{Condvar, Mutex, Semaphore, UPSafeCell};
+use crate::sync::{BankersAlgorithm, Condvar, Mutex, Semaphore, UPSafeCell};
 use crate::trap::{trap_handler, TrapContext};
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
@@ -49,6 +49,13 @@ pub struct ProcessControlBlockInner {
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     /// condvar list
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    /// 死锁检测
+    pub deadlock_detect: usize,
+    /// 记录进程中 线程持有的所，下标为 tid 值为 mutexId
+    pub mutex_hold: Vec<Option<usize>>,
+    /// 记录进程中那些锁被那些线程持有，下标位 mutexId，值为 tid
+    pub mutex_wait: Vec<Option<usize>>,
+    pub banker: BankersAlgorithm,
 }
 
 impl ProcessControlBlockInner {
@@ -81,6 +88,19 @@ impl ProcessControlBlockInner {
     /// get a task with tid in this process
     pub fn get_task(&self, tid: usize) -> Arc<TaskControlBlock> {
         self.tasks[tid].as_ref().unwrap().clone()
+    }
+
+    /// 死锁检测标志位修改
+    pub fn enable_deadlock_detect(&mut self, enable: usize) {
+        self.deadlock_detect = enable
+    }
+
+    pub fn request(&mut self, pid: usize, request: Vec<usize>) -> bool {
+        self.banker.request_resources(pid, request)
+    }
+
+    pub fn release_resources(&mut self, pid: usize, request: Vec<usize>) {
+        self.banker.release_resources(pid, request)
     }
 }
 
@@ -119,6 +139,9 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    deadlock_detect: 0,
+                    mutex_hold: Vec::new(),
+                    mutex_wait: Vec::new(),
                 })
             },
         });
