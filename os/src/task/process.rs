@@ -95,12 +95,18 @@ impl ProcessControlBlockInner {
         self.deadlock_detect = enable
     }
 
-    pub fn request(&mut self, tid: usize, request: Vec<usize>) -> bool {
+    /// 请求信号量资源
+    pub fn request(&mut self, tid: usize, request: usize) -> bool {
         self.banker.request_resources(tid, request)
     }
 
-    pub fn release_resources(&mut self, tid: usize, request: Vec<usize>) {
+    /// 释放信号量资源
+    pub fn release_resources(&mut self, tid: usize, request: usize) {
         self.banker.release_resources(tid, request)
+    }
+    /// 申请信号量资源
+    pub fn alloc_resources(&mut self, tid: usize, count: usize) {
+        self.banker.add_available(tid, count);
     }
 }
 
@@ -142,7 +148,7 @@ impl ProcessControlBlock {
                     deadlock_detect: 0,
                     mutex_hold: Vec::new(),
                     mutex_wait: Vec::new(),
-                    banker: BankersAlgorithm::new()
+                    banker: BankersAlgorithm::new(),
                 })
             },
         });
@@ -272,7 +278,7 @@ impl ProcessControlBlock {
                     deadlock_detect: 0,
                     mutex_hold: Vec::new(),
                     mutex_wait: Vec::new(),
-                    banker: BankersAlgorithm::new()
+                    banker: BankersAlgorithm::new(),
                 })
             },
         });

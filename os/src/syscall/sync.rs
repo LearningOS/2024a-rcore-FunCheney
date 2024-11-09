@@ -1,9 +1,8 @@
-use alloc::collections::{BTreeSet};
 use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
 use crate::task::{block_current_and_run_next, current_process, current_task};
 use crate::timer::{add_timer, get_time_ms};
+use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
-use alloc::vec;
 use alloc::vec::Vec;
 
 /// sleep syscall
@@ -75,14 +74,23 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
     let flag = process_inner.deadlock_detect;
-    let tid = current_task().unwrap().inner_exclusive_access().res
-        .as_ref().unwrap().tid;
+    let tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
     if flag == 1 {
         // 记录进程中线程 等待锁
-        process_inner.mutex_wait[tid] = Some(mutex_id);
+        if tid >= process_inner.mutex_wait.len() {
+            process_inner.mutex_wait.resize(tid + 1, None);
+        } else {
+            process_inner.mutex_wait[tid] = Some(mutex_id);
+        }
         let mutex_hold = &process_inner.mutex_hold;
         let mutex_wait = &process_inner.mutex_wait;
-        if detect_deadlock(tid,mutex_hold, mutex_wait) {
+        if detect_deadlock(tid, mutex_hold, mutex_wait) {
             return 0xDEAD;
         }
     }
@@ -93,9 +101,13 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
     // 线程持有锁
-    process_inner.mutex_hold[tid] = Some(mutex_id);
-    // 取消等待
-    process_inner.mutex_wait[tid] = None;
+    if tid >= process_inner.mutex_hold.len() {
+        process_inner.mutex_hold.resize(tid + 1, None);
+        process_inner.mutex_wait.resize(tid + 1, None);
+    } else {
+        process_inner.mutex_hold[tid] = Some(mutex_id);
+        process_inner.mutex_wait[tid] = None;
+    }
     0
 }
 fn detect_deadlock(
@@ -133,8 +145,6 @@ fn has_cycle(
     false
 }
 
-
-
 /// mutex unlock syscall
 pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     trace!(
@@ -151,15 +161,20 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     let process = current_process();
     let process_inner = process.inner_exclusive_access();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
-    let tid = current_task().unwrap().inner_exclusive_access()
-        .res.as_ref().unwrap().tid;
+    let _tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
     drop(process_inner);
     drop(process);
     mutex.unlock();
-    let process = current_process();
-    let mut process_inner = process.inner_exclusive_access();
+    //let process = current_process();
+    //let mut process_inner = process.inner_exclusive_access();
     // 取消持有
-    process_inner.mutex_hold[tid] = None;
+    //process_inner.mutex_hold[tid] = None;
     0
 }
 /// semaphore create syscall
@@ -175,6 +190,7 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
             .unwrap()
             .tid
     );
+
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
     let id = if let Some(id) = process_inner
@@ -192,6 +208,12 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
             .push(Some(Arc::new(Semaphore::new(res_count))));
         process_inner.semaphore_list.len() - 1
     };
+    let flag = process_inner.deadlock_detect;
+
+    // 初始化信号量资源
+    if flag == 1 {
+        process_inner.alloc_resources(id, res_count);
+    }
     id as isize
 }
 /// semaphore up syscall
@@ -216,10 +238,14 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
     let mut process_inner = process.inner_exclusive_access();
     let flag = process_inner.deadlock_detect;
     let tid = current_task()
-        .unwrap().inner_exclusive_access().res
-        .as_ref().unwrap().tid;
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
     if flag == 1 {
-        process_inner.release_resources(tid, vec![1]);
+        process_inner.release_resources(tid, sem_id);
     }
     0
 }
@@ -238,11 +264,16 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     );
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
-    let  tid = current_task().unwrap().inner_exclusive_access().res
-        .as_ref().unwrap().tid;
+    let tid = current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .unwrap()
+        .tid;
     let flag = process_inner.deadlock_detect;
     if flag == 1 {
-        if !process_inner.request(tid, vec![1]){
+        if !process_inner.request(tid, sem_id) {
             return 0xDEAD;
         }
     }
@@ -332,7 +363,7 @@ pub fn sys_enable_deadlock_detect(_enabled: usize) -> isize {
     trace!("kernel: sys_enable_deadlock_detect NOT IMPLEMENTED");
     let process = current_process();
     let mut process_inner = process.inner_exclusive_access();
-    if _enabled < 0 || _enabled > 1 {
+    if _enabled > 1 {
         return -1;
     }
     process_inner.enable_deadlock_detect(_enabled);
