@@ -1,4 +1,4 @@
-use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeSet};
 use crate::sync::{Condvar, Mutex, MutexBlocking, MutexSpin, Semaphore};
 use crate::task::{block_current_and_run_next, current_process, current_task};
 use crate::timer::{add_timer, get_time_ms};
@@ -73,7 +73,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
             .tid
     );
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
     let flag = process_inner.deadlock_detect;
     let tid = current_task().unwrap().inner_exclusive_access().res
         .as_ref().unwrap().tid;
@@ -216,12 +216,8 @@ pub fn sys_semaphore_up(sem_id: usize) -> isize {
     let mut process_inner = process.inner_exclusive_access();
     let flag = process_inner.deadlock_detect;
     let tid = current_task()
-        .unwrap()
-        .inner_exclusive_access()
-        .res
-        .as_ref()
-        .unwrap()
-        .tid;
+        .unwrap().inner_exclusive_access().res
+        .as_ref().unwrap().tid;
     if flag == 1 {
         process_inner.release_resources(tid, vec![1]);
     }
