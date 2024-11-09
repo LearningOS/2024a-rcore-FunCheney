@@ -76,12 +76,12 @@ impl BankersAlgorithm {
         self.ensure_capacity(tid, sem_id);
 
         if self.available[sem_id] == 0 {
-            return false;
+            return true;
         }
 
         self.available[sem_id] -= 1;
         self.allocation[tid][sem_id] += 1;
-        self.need[tid][sem_id] -= 1;
+        //self.need[tid][sem_id] -= 1;
 
         if self.is_safe() {
             true
@@ -106,10 +106,10 @@ impl BankersAlgorithm {
     }
 
     /// 添加可用资源
-    pub fn add_available(&mut self, sem_id: usize, count: usize) {
-        if sem_id >= self.available.len() {
-            self.available.resize(sem_id + 1, 0);
-        }
-        self.available[sem_id] += count;
+    pub fn add_available(&mut self, _pid: usize, count: usize) {
+        //if sem_id >= self.available.len() {
+        //    self.available.resize(sem_id + 1, 0);
+        //}
+        self.available.push(count);
     }
 }

@@ -105,8 +105,8 @@ impl ProcessControlBlockInner {
         self.banker.release_resources(tid, request)
     }
     /// 申请信号量资源
-    pub fn alloc_resources(&mut self, tid: usize, count: usize) {
-        self.banker.add_available(tid, count);
+    pub fn alloc_resources(&mut self, pid: usize, count: usize) {
+        self.banker.add_available(pid, count);
     }
 }
 
