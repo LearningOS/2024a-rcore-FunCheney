@@ -3,7 +3,6 @@ use crate::task::{block_current_and_run_next, current_process, current_task};
 use crate::timer::{add_timer, get_time_ms};
 use alloc::collections::BTreeSet;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 
 /// sleep syscall
 pub fn sys_sleep(ms: usize) -> isize {
@@ -81,17 +80,28 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         .as_ref()
         .unwrap()
         .tid;
+
+    // 记录进程中线程 等待锁
+    if tid >= process_inner.mutex_wait.len() {
+        process_inner.mutex_hold.resize(tid + 1, None);
+        process_inner.mutex_wait.resize(tid + 1, None);
+    }
+    process_inner.mutex_wait[tid] = Some(mutex_id);
     if flag == 1 {
-        // 记录进程中线程 等待锁
-        if tid >= process_inner.mutex_wait.len() {
-            process_inner.mutex_wait.resize(tid + 1, None);
-        } else {
-            process_inner.mutex_wait[tid] = Some(mutex_id);
-        }
-        let mutex_hold = &process_inner.mutex_hold;
-        let mutex_wait = &process_inner.mutex_wait;
-        if detect_deadlock(tid, mutex_hold, mutex_wait) {
-            return -0xDEAD;
+        let mut visited = BTreeSet::new();
+        let mut mid = mutex_id;
+        while let Some(tid2) = process_inner.mutex_hold[mid] {
+            if visited.contains(&tid2) {
+                return -0xDEAD;
+            } else {
+                visited.insert(tid2);
+                // 判断其他锁有无死锁情况
+                if let Some(mid2) = process_inner.mutex_wait[tid2] {
+                    mid = mid2;
+                } else {
+                    break;
+                }
+            }
         }
     }
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
@@ -103,46 +113,12 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
     // 线程持有锁
     if tid >= process_inner.mutex_hold.len() {
         process_inner.mutex_hold.resize(tid + 1, None);
-        process_inner.mutex_wait.resize(tid + 1, None);
-    } else {
-        process_inner.mutex_hold[tid] = Some(mutex_id);
-        process_inner.mutex_wait[tid] = None;
+        process_inner.mutex_wait.resize(mutex_id + 1, None);
     }
+    process_inner.mutex_hold[mutex_id] = Some(tid);
+    process_inner.mutex_wait[tid] = None;
+
     0
-}
-fn detect_deadlock(
-    tid: usize,
-    mutex_hold: &Vec<Option<usize>>,
-    mutex_wait: &Vec<Option<usize>>,
-) -> bool {
-    let mut visited = BTreeSet::new();
-    has_cycle(tid, &mut visited, mutex_hold, mutex_wait)
-}
-
-fn has_cycle(
-    tid: usize,
-    visited: &mut BTreeSet<usize>,
-    mutex_hold: &Vec<Option<usize>>,
-    mutex_wait: &Vec<Option<usize>>,
-) -> bool {
-    // 如果当前线程已经访问过，则检测到循环
-    if !visited.insert(tid) {
-        return true;
-    }
-
-    // 检查当前线程是否持有一个锁
-    if let Some(&Some(mutex_id)) = mutex_hold.get(tid) {
-        // 检查该锁是否正在被另一个线程等待
-        if let Some(&Some(waiting_tid)) = mutex_wait.get(mutex_id) {
-            // 递归检查等待的线程是否会形成循环
-            if has_cycle(waiting_tid, visited, mutex_hold, mutex_wait) {
-                return true;
-            }
-        }
-    }
-    // 回溯，删除当前访问路径
-    visited.remove(&tid);
-    false
 }
 
 /// mutex unlock syscall
@@ -161,7 +137,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     let process = current_process();
     let process_inner = process.inner_exclusive_access();
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
-    let _tid = current_task()
+    let tid = current_task()
         .unwrap()
         .inner_exclusive_access()
         .res
@@ -171,10 +147,10 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     drop(process_inner);
     drop(process);
     mutex.unlock();
-    //let process = current_process();
-    //let mut process_inner = process.inner_exclusive_access();
+    let process = current_process();
+    let mut process_inner = process.inner_exclusive_access();
     // 取消持有
-    //process_inner.mutex_hold[tid] = None;
+    process_inner.mutex_hold[tid] = None;
     0
 }
 /// semaphore create syscall
@@ -206,15 +182,15 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
         process_inner
             .semaphore_list
             .push(Some(Arc::new(Semaphore::new(res_count))));
+
+        let flag = process_inner.deadlock_detect;
+
+        // 初始化信号量资源
+        if flag == 1 {
+            process_inner.alloc_resources(res_count);
+        }
         process_inner.semaphore_list.len() - 1
     };
-    let flag = process_inner.deadlock_detect;
-
-    // 初始化信号量资源
-    if flag == 1 {
-        process_inner.alloc_resources(id, res_count);
-    }
-    println!("sys_semaphore_create id {}", id);
     id as isize
 }
 /// semaphore up syscall

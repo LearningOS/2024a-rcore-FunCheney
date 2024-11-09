@@ -96,17 +96,20 @@ impl ProcessControlBlockInner {
     }
 
     /// 请求信号量资源
-    pub fn request(&mut self, tid: usize, request: usize) -> bool {
-        self.banker.request_resources(tid, request)
+    pub fn request(&mut self, tid: usize, sem_id: usize) -> bool {
+        self.banker.request_resources(tid, sem_id)
     }
 
     /// 释放信号量资源
-    pub fn release_resources(&mut self, tid: usize, request: usize) {
-        self.banker.release_resources(tid, request)
+    pub fn release_resources(&mut self, tid: usize, sem_id: usize) {
+        self.banker.release_resources(tid, sem_id)
     }
     /// 申请信号量资源
-    pub fn alloc_resources(&mut self, sem_id: usize, count: usize) {
-        self.banker.add_available(sem_id, count);
+    pub fn alloc_resources(&mut self, count: usize) {
+        self.banker.init_available(count);
+        for i in 0..self.tasks.len() {
+            self.banker.init(i);
+        }
     }
 }
 

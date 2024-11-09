@@ -1,3 +1,5 @@
+use core::usize;
+
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -86,7 +88,7 @@ impl BankersAlgorithm {
             true
         } else {
             self.available[sem_id] += 1;
-            self.allocation[tid][sem_id] -= 1;
+            self.allocation[tid][sem_id] -= 19;
             self.need[tid][sem_id] += 1;
             println!("System would be unsafe; rolling back.");
             false
@@ -105,10 +107,17 @@ impl BankersAlgorithm {
     }
 
     /// 添加可用资源
-    pub fn add_available(&mut self, sem_id: usize, count: usize) {
-        if sem_id >= self.available.len() {
-            self.available.resize(sem_id + 1, 0);
+    pub fn init_available(&mut self, count: usize) {
+        if count > self.available.len() {
+            self.available.resize(count, 0);
+            self.allocation.resize(count, vec![0; self.available.len()]);
+            self.need.resize(count, vec![0; self.available.len()]);
         }
-        self.available.insert(sem_id, count);
+        self.available.push(count);
+    }
+    /// 初始化1
+    pub fn init(&mut self, tid: usize) {
+        self.allocation[tid].push(0);
+        self.need[tid].push(0);
     }
 }
