@@ -91,7 +91,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
     drop(process);
     mutex.lock();
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
     // 线程持有锁
     process_inner.mutex_hold[tid] = Some(mutex_id);
     // 取消等待
@@ -157,7 +157,7 @@ pub fn sys_mutex_unlock(mutex_id: usize) -> isize {
     drop(process);
     mutex.unlock();
     let process = current_process();
-    let process_inner = process.inner_exclusive_access();
+    let mut process_inner = process.inner_exclusive_access();
     // 取消持有
     process_inner.mutex_hold[tid] = None;
     0
