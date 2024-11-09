@@ -91,7 +91,7 @@ pub fn sys_mutex_lock(mutex_id: usize) -> isize {
         let mutex_hold = &process_inner.mutex_hold;
         let mutex_wait = &process_inner.mutex_wait;
         if detect_deadlock(tid, mutex_hold, mutex_wait) {
-            return 0xDEAD;
+            return -0xDEAD;
         }
     }
     let mutex = Arc::clone(process_inner.mutex_list[mutex_id].as_ref().unwrap());
@@ -214,6 +214,7 @@ pub fn sys_semaphore_create(res_count: usize) -> isize {
     if flag == 1 {
         process_inner.alloc_resources(id, res_count);
     }
+    println!("sys_semaphore_create id {}", id);
     id as isize
 }
 /// semaphore up syscall
@@ -274,7 +275,7 @@ pub fn sys_semaphore_down(sem_id: usize) -> isize {
     let flag = process_inner.deadlock_detect;
     if flag == 1 {
         if !process_inner.request(tid, sem_id) {
-            return 0xDEAD;
+            return -0xDEAD;
         }
     }
 
